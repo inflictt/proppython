@@ -1,19 +1,27 @@
+from datetime import date
 import mysql.connector
 
-def connect_db():
-    return mysql.connector.connect(
-        host='localhost',        
-        user='root',    
-        password='PASSWORD',
-        database='task_manager' 
-    )
+with open("error.log", "r") as f:
+    db_password = f.readline().strip()
 
-def create_task(cursor, conn, num_tasks):
+try:
+    conn = mysql.connector.connect(
+        host='localhost',
+        user='root',
+        password=db_password,
+        database='task_manager'
+    )
+    cursor = conn.cursor()
+except mysql.connector.Error as err:
+    print("Database connection error:", err)
+    exit()
+
+def creating_a_list(num_tasks, tasks_list):
     for i in range(1, num_tasks + 1):
         task_details = input(f"Enter the details for Task {i}: ")
+        tasks_list.append(task_details)
         cursor.execute("INSERT INTO tasks (task) VALUES (%s)", (task_details,))
-    conn.commit()
-    print("Tasks inserted successfully.")
+        conn.commit()
 
 def number_of_tasks():
     while True:
@@ -22,120 +30,96 @@ def number_of_tasks():
             if num_tasks > 0:
                 return num_tasks
             else:
-                print("Please enter a positive number.")
-        except ValueError:
+                print("Number must be greater than 0.")
+        except:
             print("Invalid input. Please enter a valid number.")
 
-def update_task(cursor, conn):
-    view_tasks(cursor)
-    try:
-        task_id = int(input("Enter the ID of the task to update: "))
-        new_value = input("Enter the new task description: ")
-        cursor.execute("UPDATE tasks SET task = %s WHERE id = %s", (new_value, task_id))
+def checking_results_for_choice(choice, tasks_list, user_name, completed_tasks_list, recurring_tasks_list):
+    if choice == 1:
+        print(f"Creating a list for {user_name}")
+        num_tasks = number_of_tasks()
+        creating_a_list(num_tasks, tasks_list)
+
+    elif choice == 2:
+        to_edit = int(input("Enter the index of the task you want to replace: "))
+        new_task = input("Enter the new task: ")
+        old_task = tasks_list[to_edit]
+        tasks_list[to_edit] = new_task
+        cursor.execute("UPDATE tasks SET task = %s WHERE task = %s", (new_task, old_task))
         conn.commit()
-        print("Task updated successfully.")
-    except ValueError:
-        print("Invalid input.")
+        print("Task updated.")
 
-def delete_task(cursor, conn):
-    view_tasks(cursor)
-    try:
-        task_id = int(input("Enter the ID of the task to delete: "))
-        cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+    elif choice == 3:
+        print("Tasks before deletion:", tasks_list)
+        to_delete = input("Enter the task to delete: ")
+        tasks_list.remove(to_delete)
+        cursor.execute("DELETE FROM tasks WHERE task = %s", (to_delete,))
         conn.commit()
-        print("Task deleted successfully.")
-    except ValueError:
-        print("Invalid input.")
+        print("Task deleted.")
 
-def view_tasks(cursor):
-    cursor.execute("SELECT id, task, status FROM tasks")
-    rows = cursor.fetchall()
-    print("\nTask List:")
-    for row in rows:
-        print(f"ID: {row[0]}, Task: {row[1]}, Status: {row[2]}")
-    print()
+    elif choice == 4:
+        print("Tasks:", tasks_list)
+        print("Completed tasks:", completed_tasks_list)
+        print("Recurring tasks:", recurring_tasks_list)
 
-def mark_completed(cursor, conn):
-    view_tasks(cursor)
-    try:
-        task_id = int(input("Enter the ID of the task to mark as completed: "))
-        cursor.execute("UPDATE tasks SET status = 'completed' WHERE id = %s", (task_id,))
+    elif choice == 5:
+        comp_task = int(input("Enter the index of task to mark completed: "))
+        task = tasks_list.pop(comp_task)
+        completed_tasks_list.append(task)
+        cursor.execute("UPDATE tasks SET status = 'completed' WHERE task = %s", (task,))
         conn.commit()
-        print("Task marked as completed.")
-    except ValueError:
-        print("Invalid input.")
 
-def add_recurring_tasks(cursor, conn):
-    num_tasks = number_of_tasks()
-    for i in range(num_tasks):
-        task = input(f"Enter recurring task {i + 1}: ")
-        cursor.execute("INSERT INTO tasks (task, status) VALUES (%s, 'recurring')", (task,))
-    conn.commit()
-    print("Recurring tasks added.")
+    elif choice == 6:
+        num_tasks = number_of_tasks()
+        for i in range(num_tasks):
+            rec_task = input(f"Enter recurring task {i+1}: ")
+            recurring_tasks_list.append(rec_task)
+            cursor.execute("INSERT INTO tasks (task, status) VALUES (%s, 'recurring')", (rec_task,))
+            conn.commit()
 
-def complete_recurring(cursor, conn):
-    cursor.execute("SELECT id, task FROM tasks WHERE status = 'recurring'")
-    rows = cursor.fetchall()
-    print("\nRecurring Tasks:")
-    for row in rows:
-        print(f"ID: {row[0]}, Task: {row[1]}")
-    try:
-        task_id = int(input("Enter the ID of the recurring task to mark as completed: "))
-        cursor.execute("UPDATE tasks SET status = 'completed' WHERE id = %s", (task_id,))
+    elif choice == 7:
+        comp_rec_task = int(input("Enter index of recurring task to complete: "))
+        task = recurring_tasks_list.pop(comp_rec_task)
+        completed_tasks_list.append(task)
+        cursor.execute("UPDATE tasks SET status = 'completed' WHERE task = %s", (task,))
         conn.commit()
-        print("Recurring task marked as completed.")
-    except ValueError:
-        print("Invalid input.")
 
-def get_user_choice():
-    print("\nMenu:")
-    print("1. Create a task list")
-    print("2. Update a task")
-    print("3. Delete a task")
-    print("4. View all tasks")
-    print("5. Mark a task as completed")
-    print("6. Add recurring tasks")
-    print("7. Complete recurring task")
-    print("8. Exit")
-    try:
-        choice = int(input("Enter your choice: "))
-        if 1 <= choice <= 8:
-            return choice
-        else:
-            print("Please enter a number between 1 and 8.")
-    except ValueError:
-        print("Invalid input. Please enter a number.")
-    return None
+def checking_user_input_for_integer():
+    while True:
+        try:
+            choice = int(input(
+                "\n1. Create a list\n"
+                "2. Replace a task\n"
+                "3. Delete a task\n"
+                "4. View lists\n"
+                "5. Mark task completed\n"
+                "6. Add recurring tasks\n"
+                "7. Complete recurring task\n"
+                "8. Exit\n"
+                "Enter your choice: "))
+            if 1 <= choice <= 8:
+                return choice
+            else:
+                print("Enter a number between 1 and 8.")
+        except:
+            print("Invalid input. Enter a number.")
 
 def task_manager():
-    conn = connect_db()
-    cursor = conn.cursor()
     user_name = input("Enter your name: ")
-    print(f"Welcome {user_name} to the Task Manager.")
+    print(f"Welcome, {user_name}!")
+
+    tasks_list = []
+    completed_tasks_list = []
+    recurring_tasks_list = []
 
     while True:
-        choice = get_user_choice()
-        if choice == 1:
-            num_tasks = number_of_tasks()
-            create_task(cursor, conn, num_tasks)
-        elif choice == 2:
-            update_task(cursor, conn)
-        elif choice == 3:
-            delete_task(cursor, conn)
-        elif choice == 4:
-            view_tasks(cursor)
-        elif choice == 5:
-            mark_completed(cursor, conn)
-        elif choice == 6:
-            add_recurring_tasks(cursor, conn)
-        elif choice == 7:
-            complete_recurring(cursor, conn)
-        elif choice == 8:
-            print("Exiting the application...")
+        choice = checking_user_input_for_integer()
+        if choice == 8:
+            print("Exiting...")
             break
+        checking_results_for_choice(choice, tasks_list, user_name, completed_tasks_list, recurring_tasks_list)
 
     cursor.close()
     conn.close()
 
-if __name__ == '__main__':
-    task_manager()
+task_manager()
