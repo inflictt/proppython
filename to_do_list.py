@@ -11,29 +11,17 @@ class ToDoList:
                 host='localhost',
                 user='root',
                 password=db_password,
-                database='todo_list'  # ✅ Renamed DB
+                database='todo_list'  
             )
             self.cursor = self.conn.cursor()
-            self.create_table_if_not_exists()
         except mysql.connector.Error as err:
             print("Database connection error:", err)
             exit()
 
         self.tasks_list = []
         self.completed_tasks_list = []
-        self.recurring_tasks_list = []
         self.user_name = input("Enter your name: ")
         print(f"Welcome, {self.user_name}!")
-
-    def create_table_if_not_exists(self):
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS todo_list (
-                task_id INT AUTO_INCREMENT PRIMARY KEY,
-                task TEXT NOT NULL,
-                deadline DATE
-            )
-        """)
-        self.conn.commit()
 
     def get_deadline(self):
         while True:
@@ -64,14 +52,20 @@ class ToDoList:
             print(f"\n--- Task {i} ---")
             task_details = input("Enter the task details: ")
             deadline = self.get_deadline()
+            frequency = input("Enter task frequency ('onetime' or 'recurring') [default: onetime]: ").strip().lower()
+            if frequency not in ['onetime', 'recurring']:
+                print("Invalid frequency. Defaulting to 'onetime'.")
+                frequency = 'onetime'
 
-            self.tasks_list.append((task_details, deadline))
+            self.tasks_list.append((task_details, deadline, frequency))
 
             try:
-                self.cursor.execute("INSERT INTO todo_list (task, deadline) VALUES (%s, %s)", 
-                                    (task_details, deadline))
+                self.cursor.execute(
+                    "INSERT INTO todo_list (task, deadline, frequency) VALUES (%s, %s, %s)", 
+                    (task_details, deadline, frequency)
+                )
                 self.conn.commit()
-                print(f"Task '{task_details}' with deadline {deadline} added.")
+                print(f"Task '{task_details}' added with deadline {deadline} and frequency '{frequency}'.")
             except mysql.connector.Error as err:
                 print("Failed to insert task into database:", err)
 
@@ -79,9 +73,8 @@ class ToDoList:
         try:
             to_edit = int(input("Enter the index of the task you want to replace: "))
             new_task = input("Enter the new task: ")
-            old_task = self.tasks_list[to_edit][0]
-            deadline = self.tasks_list[to_edit][1]  
-            self.tasks_list[to_edit] = (new_task, deadline)
+            old_task, deadline, frequency = self.tasks_list[to_edit]
+            self.tasks_list[to_edit] = (new_task, deadline, frequency)
             self.cursor.execute("UPDATE todo_list SET task = %s WHERE task = %s", (new_task, old_task))
             self.conn.commit()
             print("Task updated.")
@@ -90,14 +83,14 @@ class ToDoList:
 
     def delete_task(self):
         print("Tasks before deletion:")
-        for i, (task, deadline) in enumerate(self.tasks_list):
-            print(f"{i}. {task} (Deadline: {deadline})")
+        for i, (task, deadline, frequency) in enumerate(self.tasks_list):
+            print(f"{i}. {task} (Deadline: {deadline}, Frequency: {frequency})")
 
         to_delete = input("Enter the task to delete: ")
         found = False
-        for task, deadline in self.tasks_list:
+        for task, deadline, frequency in self.tasks_list:
             if task == to_delete:
-                self.tasks_list.remove((task, deadline))
+                self.tasks_list.remove((task, deadline, frequency))
                 self.cursor.execute("DELETE FROM todo_list WHERE task = %s", (to_delete,))
                 self.conn.commit()
                 print("Task deleted.")
@@ -108,36 +101,9 @@ class ToDoList:
 
     def view_lists(self):
         print("\nYour Current Tasks:")
-        for i, (task, deadline) in enumerate(self.tasks_list):
-            print(f"{i}. {task} (Deadline: {deadline})")
+        for i, (task, deadline, frequency) in enumerate(self.tasks_list):
+            print(f"{i}. {task} (Deadline: {deadline}, Frequency: {frequency})")
         print("\nCompleted Tasks:", self.completed_tasks_list)
-        print("Recurring Tasks:", self.recurring_tasks_list)
-
-    def mark_task_completed(self):
-        try:
-            comp_task = int(input("Enter the index of task to mark completed: "))
-            task, deadline = self.tasks_list.pop(comp_task)
-            self.completed_tasks_list.append(task)
-            print("Task marked as completed.")
-        except (IndexError, ValueError):
-            print("Invalid index or input.")
-
-    def add_recurring_tasks(self):
-        num_tasks = self.number_of_tasks()
-        for i in range(num_tasks):
-            rec_task = input(f"Enter recurring task {i + 1}: ")
-            self.recurring_tasks_list.append(rec_task)
-            self.cursor.execute("INSERT INTO todo_list (task) VALUES (%s)", (rec_task,))
-            self.conn.commit()
-
-    def complete_recurring_task(self):
-        try:
-            comp_rec_task = int(input("Enter index of recurring task to complete: "))
-            task = self.recurring_tasks_list.pop(comp_rec_task)
-            self.completed_tasks_list.append(task)
-            print("Recurring task marked completed.")
-        except (IndexError, ValueError):
-            print("Invalid index or input.")
 
     def get_user_choice(self):
         while True:
@@ -147,15 +113,12 @@ class ToDoList:
                     "2. Replace a task\n"
                     "3. Delete a task\n"
                     "4. View lists\n"
-                    "5. Mark task completed\n"
-                    "6. Add recurring tasks\n"
-                    "7. Complete recurring task\n"
-                    "8. Exit\n"
+                    "5. Exit\n"
                     "Enter your choice: "))
-                if 1 <= choice <= 8:
+                if 1 <= choice <= 5:
                     return choice
                 else:
-                    print("Enter a number between 1 and 8.")
+                    print("Enter a number between 1 and 5.")
             except:
                 print("Invalid input. Enter a number.")
 
@@ -171,12 +134,6 @@ class ToDoList:
             elif choice == 4:
                 self.view_lists()
             elif choice == 5:
-                self.mark_task_completed()
-            elif choice == 6:
-                self.add_recurring_tasks()
-            elif choice == 7:
-                self.complete_recurring_task()
-            elif choice == 8:
                 print("Exiting...")
                 break
         self.cursor.close()
