@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import datetime, date
 import mysql.connector
 
-class TaskManager:
+class ToDoList:
     def __init__(self):
         with open("error.log", "r") as f:
             db_password = f.readline().strip()
@@ -11,11 +11,10 @@ class TaskManager:
                 host='localhost',
                 user='root',
                 password=db_password,
-                database='task_manager'
+                database='todo_list'  # ✅ Renamed DB
             )
-
-
             self.cursor = self.conn.cursor()
+            self.create_table_if_not_exists()
         except mysql.connector.Error as err:
             print("Database connection error:", err)
             exit()
@@ -25,6 +24,28 @@ class TaskManager:
         self.recurring_tasks_list = []
         self.user_name = input("Enter your name: ")
         print(f"Welcome, {self.user_name}!")
+
+    def create_table_if_not_exists(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS todo_list (
+                task_id INT AUTO_INCREMENT PRIMARY KEY,
+                task TEXT NOT NULL,
+                deadline DATE
+            )
+        """)
+        self.conn.commit()
+
+    def get_deadline(self):
+        while True:
+            user_input = input("Enter the deadline (YYYY-MM-DD): ")
+            try:
+                deadline = datetime.strptime(user_input, "%Y-%m-%d").date()
+                if deadline < date.today():
+                    print("Deadline cannot be in the past. Try again.")
+                else:
+                    return deadline
+            except ValueError:
+                print("Invalid date format. Please use YYYY-MM-DD.")
 
     def number_of_tasks(self):
         while True:
@@ -40,47 +61,64 @@ class TaskManager:
     def create_tasks(self):
         num_tasks = self.number_of_tasks()
         for i in range(1, num_tasks + 1):
-            task_details = input(f"Enter the details for Task {i}: ")
-            deadline= input()
-            self.tasks_list.append(task_details)
-            self.cursor.execute("INSERT INTO tasks (task) VALUES (%s)", (task_details,))
-            self.conn.commit()
+            print(f"\n--- Task {i} ---")
+            task_details = input("Enter the task details: ")
+            deadline = self.get_deadline()
+
+            self.tasks_list.append((task_details, deadline))
+
+            try:
+                self.cursor.execute("INSERT INTO todo_list (task, deadline) VALUES (%s, %s)", 
+                                    (task_details, deadline))
+                self.conn.commit()
+                print(f"Task '{task_details}' with deadline {deadline} added.")
+            except mysql.connector.Error as err:
+                print("Failed to insert task into database:", err)
 
     def replace_task(self):
         try:
             to_edit = int(input("Enter the index of the task you want to replace: "))
             new_task = input("Enter the new task: ")
-            old_task = self.tasks_list[to_edit]
-            self.tasks_list[to_edit] = new_task
-            self.cursor.execute("UPDATE tasks SET task = %s WHERE task = %s", (new_task, old_task))
+            old_task = self.tasks_list[to_edit][0]
+            deadline = self.tasks_list[to_edit][1]  
+            self.tasks_list[to_edit] = (new_task, deadline)
+            self.cursor.execute("UPDATE todo_list SET task = %s WHERE task = %s", (new_task, old_task))
             self.conn.commit()
             print("Task updated.")
         except (IndexError, ValueError):
             print("Invalid index or input.")
 
     def delete_task(self):
-        print("Tasks before deletion:", self.tasks_list)
+        print("Tasks before deletion:")
+        for i, (task, deadline) in enumerate(self.tasks_list):
+            print(f"{i}. {task} (Deadline: {deadline})")
+
         to_delete = input("Enter the task to delete: ")
-        if to_delete in self.tasks_list:
-            self.tasks_list.remove(to_delete)
-            self.cursor.execute("DELETE FROM tasks WHERE task = %s", (to_delete,))
-            self.conn.commit()
-            print("Task deleted.")
-        else:
+        found = False
+        for task, deadline in self.tasks_list:
+            if task == to_delete:
+                self.tasks_list.remove((task, deadline))
+                self.cursor.execute("DELETE FROM todo_list WHERE task = %s", (to_delete,))
+                self.conn.commit()
+                print("Task deleted.")
+                found = True
+                break
+        if not found:
             print("Task not found.")
 
     def view_lists(self):
-        print("Tasks:", self.tasks_list)
-        print("Completed tasks:", self.completed_tasks_list)
-        print("Recurring tasks:", self.recurring_tasks_list)
+        print("\nYour Current Tasks:")
+        for i, (task, deadline) in enumerate(self.tasks_list):
+            print(f"{i}. {task} (Deadline: {deadline})")
+        print("\nCompleted Tasks:", self.completed_tasks_list)
+        print("Recurring Tasks:", self.recurring_tasks_list)
 
     def mark_task_completed(self):
         try:
             comp_task = int(input("Enter the index of task to mark completed: "))
-            task = self.tasks_list.pop(comp_task)
+            task, deadline = self.tasks_list.pop(comp_task)
             self.completed_tasks_list.append(task)
-            self.cursor.execute("UPDATE tasks SET status = 'completed' WHERE task = %s", (task,))
-            self.conn.commit()
+            print("Task marked as completed.")
         except (IndexError, ValueError):
             print("Invalid index or input.")
 
@@ -89,7 +127,7 @@ class TaskManager:
         for i in range(num_tasks):
             rec_task = input(f"Enter recurring task {i + 1}: ")
             self.recurring_tasks_list.append(rec_task)
-            self.cursor.execute("INSERT INTO tasks (task, status) VALUES (%s, 'recurring')", (rec_task,))
+            self.cursor.execute("INSERT INTO todo_list (task) VALUES (%s)", (rec_task,))
             self.conn.commit()
 
     def complete_recurring_task(self):
@@ -97,8 +135,7 @@ class TaskManager:
             comp_rec_task = int(input("Enter index of recurring task to complete: "))
             task = self.recurring_tasks_list.pop(comp_rec_task)
             self.completed_tasks_list.append(task)
-            self.cursor.execute("UPDATE tasks SET status = 'completed' WHERE task = %s", (task,))
-            self.conn.commit()
+            print("Recurring task marked completed.")
         except (IndexError, ValueError):
             print("Invalid index or input.")
 
@@ -145,5 +182,5 @@ class TaskManager:
         self.cursor.close()
         self.conn.close()
 
-tm = TaskManager()
-tm.run()
+todo = ToDoList()
+todo.run()
