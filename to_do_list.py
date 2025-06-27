@@ -49,12 +49,12 @@ class ToDoList:
     def create_tasks(self):
         num_tasks = self.number_of_tasks()
         for i in range(1, num_tasks + 1):
-            print(f"\n--- Task {i} ---")
+            print(f"\nTask {i}")
             task_details = input("Enter the task details: ")
             deadline = self.get_deadline()
-            frequency = input("Enter task frequency ('onetime' or 'recurring') [default: onetime]: ").strip().lower()
+            frequency = input("Enter task frequency ('onetime' or 'recurring'): ").strip().lower()
             if frequency not in ['onetime', 'recurring']:
-                print("Invalid frequency. Defaulting to 'onetime'.")
+                print("Invalid frequency so by defaulting to 'onetime'.")
                 frequency = 'onetime'
 
             self.tasks_list.append((task_details, deadline, frequency))
